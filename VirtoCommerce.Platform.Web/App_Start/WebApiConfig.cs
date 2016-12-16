@@ -2,12 +2,14 @@
 using System.Net.Http.Formatting;
 using System.Web;
 using System.Web.Http;
+using System.Web.Http.ExceptionHandling;
 using System.Web.Http.OData.Extensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Web.Security;
+using VirtoCommerce.Platform.Web.App_Start;
 
 namespace VirtoCommerce.Platform.Web
 {
@@ -16,6 +18,8 @@ namespace VirtoCommerce.Platform.Web
         public static void Register(HttpConfiguration config)
         {
             config.Filters.Add(new CheckPermissionAttribute { Permission = PredefinedPermissions.SecurityCallApi });
+
+            config.EnableCors();
 
             // Web API routes
             config.MapHttpAttributeRoutes();
@@ -28,9 +32,9 @@ namespace VirtoCommerce.Platform.Web
             jsonFormatter.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
             jsonFormatter.SerializerSettings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
             jsonFormatter.SerializerSettings.NullValueHandling = NullValueHandling.Ignore;
-            jsonFormatter.SerializerSettings.Converters.Add(new StringEnumConverter { CamelCaseText = true });
+            jsonFormatter.SerializerSettings.Converters.Add(new StringEnumConverter());
             jsonFormatter.SerializerSettings.PreserveReferencesHandling = PreserveReferencesHandling.None;
-            jsonFormatter.SerializerSettings.Formatting = Formatting.Indented;
+            jsonFormatter.SerializerSettings.Formatting = Formatting.None;
             jsonFormatter.MediaTypeMappings.Add(new RequestHeaderMapping("Accept", "text/html", StringComparison.InvariantCultureIgnoreCase, true, "application/json"));
 
             jsonFormatter.SerializerSettings.Error += (sender, args) =>
@@ -44,6 +48,8 @@ namespace VirtoCommerce.Platform.Web
             // For more information, visit http://go.microsoft.com/fwlink/?LinkId=279712.
             //config.EnableQuerySupport();
             config.AddODataQueryFilter();
+
+            config.Services.Replace(typeof(IExceptionHandler), new AiExceptionHandler());
         }
     }
 }

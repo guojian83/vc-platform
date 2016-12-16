@@ -13,6 +13,7 @@ using System.Web.Routing;
 using CacheManager.Core;
 using Common.Logging;
 using Hangfire;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNet.Identity;
 using Microsoft.AspNet.SignalR;
 using Microsoft.AspNet.SignalR.Infrastructure;
@@ -214,8 +215,9 @@ namespace VirtoCommerce.Platform.Web
                 }
             });
 
+            //Get initialized modules list sorted by dependency order
             var postInitializeModules = moduleCatalog.CompleteListWithDependencies(moduleCatalog.Modules.OfType<ManifestModuleInfo>())
-                .Where(m => m.ModuleInstance != null)
+                .Where(m => m.ModuleInstance != null && m.State == ModuleState.Initialized)
                 .ToArray();
 
             foreach (var module in postInitializeModules)
@@ -228,6 +230,14 @@ namespace VirtoCommerce.Platform.Web
             GlobalHost.DependencyResolver.Register(typeof(IPerformanceCounterManager), () => tempCounterManager);
             var hubConfiguration = new HubConfiguration { EnableJavaScriptProxies = false };
             app.MapSignalR("/" + moduleInitializerOptions.RoutePrefix + "signalr", hubConfiguration);
+
+            // Initialize InstrumentationKey from EnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY")
+            var appInsightKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
+
+            if (!string.IsNullOrEmpty(appInsightKey))
+            {
+                TelemetryConfiguration.Active.InstrumentationKey = appInsightKey;
+            }
         }
 
         private static Assembly CurrentDomainOnAssemblyResolve(object sender, ResolveEventArgs args)
@@ -304,18 +314,11 @@ namespace VirtoCommerce.Platform.Web
                         {
                             new ModuleSetting
                             {
-                                Name = "VirtoCommerce.Platform.Notifications.SendGrid.UserName",
+                                Name = "VirtoCommerce.Platform.Notifications.SendGrid.ApiKey",
                                 ValueType = ModuleSetting.TypeString,
-                                Title = "SendGrid UserName",
-                                Description = "Your SendGrid account username"
-                            },
-                            new ModuleSetting
-                            {
-                                Name = "VirtoCommerce.Platform.Notifications.SendGrid.Secret",
-                                ValueType = ModuleSetting.TypeSecureString,
-                                Title = "SendGrid Password",
-                                Description = "Your SendGrid account password"
-                            }
+                                Title = "SendGrid API key",
+                                Description = "Your SendGrid API key"
+                            }                        
                         }
                     },
                     new ModuleSettingsGroup
@@ -466,7 +469,8 @@ namespace VirtoCommerce.Platform.Web
 
             #region Modularity
 
-            var externalModuleCatalog = new ExternalManifestModuleCatalog(moduleCatalog.Modules, ConfigurationManager.AppSettings.GetValues("VirtoCommerce:ModulesDataSources"), container.Resolve<ILog>());
+            var modulesDataSources = ConfigurationManager.AppSettings.GetValue("VirtoCommerce:ModulesDataSources", string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var externalModuleCatalog = new ExternalManifestModuleCatalog(moduleCatalog.Modules, modulesDataSources, container.Resolve<ILog>());
             container.RegisterType<ModulesController>(new InjectionConstructor(externalModuleCatalog, new ModuleInstaller(modulesPath, externalModuleCatalog), notifier, container.Resolve<IUserNameResolver>(), settingsManager));
 
             #endregion
